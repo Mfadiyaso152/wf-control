@@ -1,0 +1,6 @@
+{
+  "name": "معرض وسام الشفا للسيارات",
+  "description": "نظام فخم وسهل لموظفي معارض السيارات لإدخال بيانات الشركة، نوع السيارة، الموديل، الممشى ورقم المفتاح مع إدارة كاملة لمفاتيح المعرض.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
