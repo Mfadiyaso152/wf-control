@@ -94,8 +94,8 @@ export default function App() {
   // Calculate RTL slider track fill percentage
   const percentage = Math.min(100, Math.max(0, (mileage / maxSliderKm) * 100));
 
-  // Form Submit Handler
-  const handleSubmit = (e: React.FormEvent) => {
+  // Form Submit Handler (Directly exports and downloads PDF)
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!company.trim()) {
@@ -130,12 +130,37 @@ export default function App() {
     };
 
     setPdfData(compiledData);
-    setShowPdfModal(true);
-    setShowSavedToast(true);
+    setIsGeneratingPdf(true);
 
-    setTimeout(() => {
-      setShowSavedToast(false);
-    }, 3000);
+    try {
+      const pdf = await renderPdfDocument(compiledData);
+      const filename = `وسام_الشفا_بطاقة_مفتاح_${compiledData.keyNumber || 'جديد'}.pdf`;
+
+      // Trigger jsPDF file save
+      pdf.save(filename);
+
+      // Fallback anchor blob click for constrained iframe environments
+      const pdfBlob = pdf.output('blob');
+      const blobUrl = URL.createObjectURL(pdfBlob);
+      const downloadAnchor = document.createElement('a');
+      downloadAnchor.href = blobUrl;
+      downloadAnchor.download = filename;
+      document.body.appendChild(downloadAnchor);
+      downloadAnchor.click();
+      document.body.removeChild(downloadAnchor);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+
+      setShowSavedToast(true);
+      setTimeout(() => {
+        setShowSavedToast(false);
+      }, 4000);
+    } catch (error) {
+      console.error('PDF Generation error:', error);
+      alert('حدث خطأ أثناء حفظ الملف، سيتم فتح نافذة الطباعة كبديل.');
+      window.print();
+    } finally {
+      setIsGeneratingPdf(false);
+    }
   };
 
   const handleReset = () => {
@@ -153,7 +178,7 @@ export default function App() {
   // Direct 2D Canvas PDF Render Engine (Fast, Reliable, Zero CSS Parser Errors)
   const renderPdfDocument = async (data: NonNullable<typeof pdfData>): Promise<jsPDF> => {
     const width = 1000;
-    const height = 1380;
+    const height = 960;
     const canvas = document.createElement('canvas');
     canvas.width = width;
     canvas.height = height;
@@ -188,34 +213,23 @@ export default function App() {
 
     // Draw Logo Image
     if (logo.complete && logo.naturalWidth > 0) {
-      ctx.drawImage(logo, 60, 75, 120, 120);
+      ctx.drawImage(logo, 60, 65, 110, 110);
     }
 
-    // Title & Subtitle (RTL Direction)
+    // Title (RTL Direction) - Subtitle and Date removed per user request
     ctx.direction = 'rtl';
     ctx.textAlign = 'right';
 
     ctx.fillStyle = '#0f172a';
-    ctx.font = 'bold 36px Tajawal, sans-serif';
-    ctx.fillText('معرض وسام الشفا للسيارات', width - 60, 120);
-
-    ctx.fillStyle = '#64748b';
-    ctx.font = 'bold 20px Tajawal, sans-serif';
-    ctx.fillText('بطاقة تسجيل معلومات السيارة والمفتاح الرسمية', width - 60, 160);
-
-    // Date Text
-    ctx.direction = 'ltr';
-    ctx.textAlign = 'left';
-    ctx.fillStyle = '#64748b';
-    ctx.font = 'bold 16px monospace, sans-serif';
-    ctx.fillText(`تاريخ الإدخال: ${data.createdAt}`, 60, 220);
+    ctx.font = 'bold 38px Tajawal, sans-serif';
+    ctx.fillText('معرض وسام الشفا للسيارات', width - 60, 130);
 
     // Horizontal Divider
     ctx.strokeStyle = '#e2e8f0';
     ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(60, 235);
-    ctx.lineTo(width - 60, 235);
+    ctx.moveTo(60, 195);
+    ctx.lineTo(width - 60, 195);
     ctx.stroke();
 
     // Info Box Drawing Function
@@ -240,7 +254,7 @@ export default function App() {
       ctx.fillText(value, x + w - 24, y + 80);
     };
 
-    const startY = 265;
+    const startY = 220;
     const boxW = 410;
     const boxH = 110;
 
@@ -248,7 +262,7 @@ export default function App() {
     drawBox(width - 60 - boxW, startY, boxW, boxH, 'شركة السيارة:', data.company);
     drawBox(60, startY, boxW, boxH, 'نوع / اسم السيارة:', data.carName);
 
-    // Row 2: Model, Color & Price
+    // Row 2: Model, Color & Mileage
     const row2Y = startY + boxH + 20;
     const row2BoxW = 280;
 
@@ -258,77 +272,76 @@ export default function App() {
     // Box 2 (Middle): Color
     drawBox(360, row2Y, row2BoxW, boxH, 'اللون:', data.color || 'غير محدد');
 
-    // Box 3 (Left): Price
+    // Box 3 (Left): Mileage
+    const formattedKm = new Intl.NumberFormat('ar-SA').format(data.mileage);
+    drawBox(60, row2Y, row2BoxW, boxH, 'الممشى:', `${formattedKm} كم`);
+
+    // Price Container Box (Full width)
+    const priceY = row2Y + boxH + 25;
+    const fullW = width - 120;
+    const priceH = 135;
+
     if (data.price === 'سوم') {
       ctx.fillStyle = '#fffbeb';
       ctx.strokeStyle = '#fde68a';
-      ctx.lineWidth = 2;
+      ctx.lineWidth = 2.5;
       ctx.beginPath();
-      ctx.roundRect(60, row2Y, row2BoxW, boxH, 18);
+      ctx.roundRect(60, priceY, fullW, priceH, 24);
       ctx.fill();
       ctx.stroke();
 
       ctx.direction = 'rtl';
-      ctx.textAlign = 'right';
+      ctx.textAlign = 'center';
+
       ctx.fillStyle = '#b45309';
-      ctx.font = 'bold 18px Tajawal, sans-serif';
-      ctx.fillText('السعر:', 60 + row2BoxW - 24, row2Y + 38);
+      ctx.font = 'bold 22px Tajawal, sans-serif';
+      ctx.fillText('السعر', width / 2, priceY + 42);
 
       ctx.fillStyle = '#92400e';
-      ctx.font = 'bold 28px Tajawal, sans-serif';
-      ctx.fillText('سوم', 60 + row2BoxW - 24, row2Y + 80);
+      ctx.font = '900 48px Tajawal, sans-serif';
+      ctx.fillText('سوم', width / 2, priceY + 98);
     } else {
-      drawBox(60, row2Y, row2BoxW, boxH, 'السعر:', data.price || 'غير محدد');
+      ctx.fillStyle = '#f0fdf4';
+      ctx.strokeStyle = '#bbf7d0';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.roundRect(60, priceY, fullW, priceH, 24);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.direction = 'rtl';
+      ctx.textAlign = 'center';
+
+      ctx.fillStyle = '#15803d';
+      ctx.font = 'bold 22px Tajawal, sans-serif';
+      ctx.fillText('السعر', width / 2, priceY + 42);
+
+      ctx.fillStyle = '#166534';
+      ctx.font = '900 44px Tajawal, sans-serif';
+      ctx.fillText(data.price || 'غير محدد', width / 2, priceY + 98);
     }
 
-    // Mileage Container Box
-    const mileageY = row2Y + boxH + 30;
-    const fullW = width - 120;
-    const mileageH = 170;
-
-    ctx.fillStyle = '#eff6ff';
-    ctx.strokeStyle = '#bfdbfe';
-    ctx.lineWidth = 2.5;
-    ctx.beginPath();
-    ctx.roundRect(60, mileageY, fullW, mileageH, 24);
-    ctx.fill();
-    ctx.stroke();
-
-    ctx.direction = 'rtl';
-    ctx.textAlign = 'center';
-
-    ctx.fillStyle = '#1e40af';
-    ctx.font = 'bold 22px Tajawal, sans-serif';
-    ctx.fillText('الممشى الحالي وتقييم الحالة', width / 2, mileageY + 45);
-
-    const formattedKm = new Intl.NumberFormat('ar-SA').format(data.mileage);
-    ctx.fillStyle = '#1e3a8a';
-    ctx.font = '900 46px monospace, Tajawal, sans-serif';
-    ctx.fillText(`${formattedKm} كم`, width / 2, mileageY + 102);
-
-    ctx.fillStyle = '#2563eb';
-    ctx.font = 'bold 22px Tajawal, sans-serif';
-    ctx.fillText(`التقييم: ${data.mileageCondition}`, width / 2, mileageY + 148);
-
-    // Key Number Box
-    const keyY = mileageY + mileageH + 30;
-    const keyH = 190;
+    // Key Number Box with "رقم المفتاح:" label
+    const keyY = priceY + priceH + 25;
+    const keyH = 150;
 
     ctx.fillStyle = '#0f172a';
     ctx.beginPath();
     ctx.roundRect(60, keyY, fullW, keyH, 24);
     ctx.fill();
 
+    ctx.direction = 'rtl';
+    ctx.textAlign = 'center';
     ctx.fillStyle = '#94a3b8';
     ctx.font = 'bold 22px Tajawal, sans-serif';
-    ctx.fillText('رقم المفتاح المعتمد بخزنة المعرض', width / 2, keyY + 60);
+    ctx.fillText('رقم المفتاح:', width / 2, keyY + 45);
 
     ctx.fillStyle = '#60a5fa';
-    ctx.font = '900 64px monospace, sans-serif';
-    ctx.fillText(data.keyNumber, width / 2, keyY + 140);
+    ctx.font = '900 60px monospace, sans-serif';
+    ctx.fillText(data.keyNumber, width / 2, keyY + 115);
 
-    // Footer Divider & Seal
-    const footerY = keyY + keyH + 50;
+    // Footer Divider & Showroom Name
+    const footerY = keyY + keyH + 35;
     ctx.strokeStyle = '#cbd5e1';
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -340,13 +353,7 @@ export default function App() {
     ctx.textAlign = 'right';
     ctx.fillStyle = '#334155';
     ctx.font = 'bold 20px Tajawal, sans-serif';
-    ctx.fillText('معرض وسام الشفا للسيارات', width - 60, footerY + 38);
-
-    ctx.direction = 'ltr';
-    ctx.textAlign = 'left';
-    ctx.fillStyle = '#64748b';
-    ctx.font = '18px Tajawal, sans-serif';
-    ctx.fillText('مستند رسمي - مفاتيح الخزنة', 60, footerY + 38);
+    ctx.fillText('معرض وسام الشفا للسيارات', width - 60, footerY + 36);
 
     // Convert Canvas to PDF
     const imgData = canvas.toDataURL('image/jpeg', 0.98);
@@ -413,8 +420,8 @@ export default function App() {
           >
             <CheckCircle2 className="w-6 h-6 text-emerald-400 flex-shrink-0" />
             <div className="text-right">
-              <div className="font-bold text-sm text-white">تم تجهيز بيانات بطاقة المفتاح!</div>
-              <div className="text-xs text-slate-300">جاهز للتصدير والحفظ كـ PDF</div>
+              <div className="font-bold text-sm text-white">تم حفظ وتنزيل ملف الـ PDF بنجاح!</div>
+              <div className="text-xs text-slate-300">تم حفظ المستند مباشرة على جهازك</div>
             </div>
           </motion.div>
         )}
@@ -506,8 +513,8 @@ export default function App() {
             </div>
           </div>
 
-          {/* 3. MODEL SELECTION, COLOR & PRICE FIELDS */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 pt-2 border-t border-slate-100">
+          {/* 3. MODEL SELECTION & COLOR FIELDS */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-2 border-t border-slate-100">
             {/* Model Year Selection */}
             <div className="space-y-1.5">
               <label className="block text-xs font-bold text-slate-700 flex items-center gap-1.5">
@@ -541,52 +548,6 @@ export default function App() {
                 placeholder="اكتب اللون هنا..."
                 className="w-full bg-slate-50 border border-slate-300 text-slate-900 font-bold text-sm rounded-xl py-3 px-3 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none transition placeholder:text-slate-400 placeholder:font-normal"
               />
-            </div>
-
-            {/* PRICE FIELD WITH (سوم) CHECKBOX */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <label className="block text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                  <Coins className="w-4 h-4 text-blue-600" />
-                  <span>السعر</span>
-                </label>
-
-                {/* Small option for (سوم) */}
-                <label className="inline-flex items-center gap-1 cursor-pointer text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 px-2 py-0.5 rounded-md border border-amber-300 transition select-none">
-                  <input
-                    type="checkbox"
-                    checked={isSoom}
-                    onChange={(e) => {
-                      const checked = e.target.checked;
-                      setIsSoom(checked);
-                      if (checked) {
-                        setPrice('سوم');
-                      } else if (price === 'سوم') {
-                        setPrice('');
-                      }
-                    }}
-                    className="w-3.5 h-3.5 text-amber-600 rounded focus:ring-amber-500 cursor-pointer accent-amber-600"
-                  />
-                  <span>(سوم)</span>
-                </label>
-              </div>
-
-              <div className="relative">
-                <input
-                  type="text"
-                  disabled={isSoom}
-                  value={isSoom ? 'سوم' : price}
-                  onChange={(e) => {
-                    if (!isSoom) setPrice(e.target.value);
-                  }}
-                  placeholder={isSoom ? 'سوم' : 'اكتب السعر...'}
-                  className={`w-full text-sm rounded-xl py-3 px-3 font-bold transition ${
-                    isSoom 
-                      ? 'bg-amber-100/90 border-2 border-amber-400 text-amber-950 font-black cursor-not-allowed text-center text-base' 
-                      : 'bg-slate-50 border border-slate-300 text-slate-900 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder:text-slate-400 placeholder:font-normal'
-                  }`}
-                />
-              </div>
             </div>
           </div>
 
@@ -670,6 +631,52 @@ export default function App() {
             </div>
           </div>
 
+          {/* 5. PRICE FIELD WITH (سوم) CHECKBOX */}
+          <div className="pt-2 border-t border-slate-100 space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                <Coins className="w-4 h-4 text-blue-600" />
+                <span>سعر السيارة</span>
+              </label>
+
+              {/* Small option for (سوم) */}
+              <label className="inline-flex items-center gap-1 cursor-pointer text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 px-2.5 py-1 rounded-lg border border-amber-300 transition select-none">
+                <input
+                  type="checkbox"
+                  checked={isSoom}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    setIsSoom(checked);
+                    if (checked) {
+                      setPrice('سوم');
+                    } else if (price === 'سوم') {
+                      setPrice('');
+                    }
+                  }}
+                  className="w-3.5 h-3.5 text-amber-600 rounded focus:ring-amber-500 cursor-pointer accent-amber-600"
+                />
+                <span>تحديد السعر بـ (سوم)</span>
+              </label>
+            </div>
+
+            <div className="relative">
+              <input
+                type="text"
+                disabled={isSoom}
+                value={isSoom ? 'سوم' : price}
+                onChange={(e) => {
+                  if (!isSoom) setPrice(e.target.value);
+                }}
+                placeholder={isSoom ? 'سوم' : 'اكتب سعر السيارة (مثال: 120,000 ريال)...'}
+                className={`w-full text-sm rounded-xl py-3 px-4 font-bold transition ${
+                  isSoom 
+                    ? 'bg-amber-100/90 border-2 border-amber-400 text-amber-950 font-black cursor-not-allowed text-center text-base' 
+                    : 'bg-slate-50 border border-slate-300 text-slate-900 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder:text-slate-400 placeholder:font-normal'
+                }`}
+              />
+            </div>
+          </div>
+
           {/* 5. KEY NUMBER AT THE VERY BOTTOM */}
           <div className="pt-6 border-t border-slate-200 space-y-2">
             <label className="block text-sm font-black text-slate-900 flex items-center gap-2">
@@ -707,10 +714,20 @@ export default function App() {
 
             <button
               type="submit"
-              className="px-8 py-3.5 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-black text-base md:text-lg shadow-lg shadow-blue-600/25 flex items-center gap-2 transition transform active:scale-95 cursor-pointer border border-blue-500"
+              disabled={isGeneratingPdf}
+              className="px-8 py-3.5 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-black text-base md:text-lg shadow-lg shadow-blue-600/25 flex items-center gap-2 transition transform active:scale-95 cursor-pointer border border-blue-500 disabled:opacity-50"
             >
-              <FileDown className="w-5 h-5 text-white" />
-              <span>حفظ وتصدير PDF</span>
+              {isGeneratingPdf ? (
+                <>
+                  <Loader2 className="w-5 h-5 text-white animate-spin" />
+                  <span>جاري حفظ وتحميل الـ PDF...</span>
+                </>
+              ) : (
+                <>
+                  <FileDown className="w-5 h-5 text-white" />
+                  <span>حفظ وتصدير PDF</span>
+                </>
+              )}
             </button>
           </div>
         </form>
@@ -761,15 +778,7 @@ export default function App() {
                       <h2 className="text-lg md:text-xl font-black text-slate-900 font-['Readex_Pro']">
                         معرض وسام الشفا للسيارات
                       </h2>
-                      <p className="text-xs text-slate-500 font-medium">
-                        بطاقة تسجيل معلومات السيارة والمفتاح
-                      </p>
                     </div>
-                  </div>
-
-                  <div className="text-left font-mono text-[11px] text-slate-500">
-                    <div>تاريخ الإدخال:</div>
-                    <div className="font-bold text-slate-800">{pdfData.createdAt}</div>
                   </div>
                 </div>
 
@@ -798,27 +807,30 @@ export default function App() {
                       <span className="font-extrabold text-slate-900 text-sm">{pdfData.color}</span>
                     </div>
 
-                    <div className={`p-2.5 rounded-xl border ${pdfData.price === 'سوم' ? 'bg-amber-50 border-amber-300 text-amber-900' : 'bg-slate-50 border-slate-200 text-slate-900'}`}>
-                      <span className="text-[11px] text-slate-500 block">السعر:</span>
-                      <span className="font-extrabold text-sm">{pdfData.price}</span>
+                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                      <span className="text-[11px] text-slate-500 block">الممشى:</span>
+                      <span className="font-extrabold text-slate-900 font-mono text-sm">{new Intl.NumberFormat('ar-SA').format(pdfData.mileage)} كم</span>
                     </div>
                   </div>
 
-                  {/* Mileage & Condition Box */}
-                  <div className="bg-blue-50/70 border border-blue-200 text-slate-900 p-4 rounded-2xl text-center space-y-1">
-                    <div className="text-xs text-blue-800 font-bold">الممشى الحالي وتقييم الحالة:</div>
-                    <div className="text-2xl font-black font-mono text-blue-900">
-                      {new Intl.NumberFormat('ar-SA').format(pdfData.mileage)} كم
+                  {/* Price Box */}
+                  <div className={`p-4 rounded-2xl text-center space-y-1 border ${
+                    pdfData.price === 'سوم'
+                      ? 'bg-amber-50/80 border-amber-300 text-amber-950'
+                      : 'bg-emerald-50/80 border-emerald-200 text-emerald-950'
+                  }`}>
+                    <div className={`text-xs font-bold ${pdfData.price === 'سوم' ? 'text-amber-800' : 'text-emerald-800'}`}>
+                      السعر:
                     </div>
-                    <div className="text-xs font-extrabold text-blue-700 pt-1">
-                      التقييم: {pdfData.mileageCondition}
+                    <div className={`text-2xl font-black ${pdfData.price === 'سوم' ? 'text-amber-900' : 'text-emerald-900'}`}>
+                      {pdfData.price}
                     </div>
                   </div>
 
-                  {/* Key Number Highlights */}
-                  <div className="bg-slate-900 text-white p-4 rounded-2xl text-center shadow-md">
-                    <div className="text-xs font-bold text-slate-300 uppercase">رقم المفتاح المعتمد بخزنة المعرض:</div>
-                    <div className="text-3xl font-black font-mono tracking-widest mt-0.5 text-blue-400">
+                  {/* Key Number Highlights (With label "رقم المفتاح:") */}
+                  <div className="bg-slate-900 text-white py-4 px-4 rounded-2xl text-center shadow-md space-y-1">
+                    <div className="text-xs font-bold text-slate-300 uppercase">رقم المفتاح:</div>
+                    <div className="text-3xl md:text-4xl font-black font-mono tracking-widest text-blue-400">
                       {pdfData.keyNumber}
                     </div>
                   </div>
@@ -830,7 +842,6 @@ export default function App() {
                     <ShieldCheck className="w-4 h-4 text-blue-600" />
                     <span>معرض وسام الشفا للسيارات</span>
                   </div>
-                  <div>مستند رسمي - مفاتيح الخزنة</div>
                 </div>
               </div>
 
