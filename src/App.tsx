@@ -12,7 +12,8 @@ import {
   Palette,
   X,
   ShieldCheck,
-  Loader2
+  Loader2,
+  Coins
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import jsPDF from 'jspdf';
@@ -24,6 +25,8 @@ export default function App() {
   const [carName, setCarName] = useState('');
   const [modelYear, setModelYear] = useState<number>(new Date().getFullYear());
   const [color, setColor] = useState<string>(''); // Empty default per user request
+  const [price, setPrice] = useState<string>('');
+  const [isSoom, setIsSoom] = useState<boolean>(false);
   const [mileage, setMileage] = useState<number>(0);
   const [typedMileage, setTypedMileage] = useState<string>('0');
   const [isEditingMileageInput, setIsEditingMileageInput] = useState(false);
@@ -38,6 +41,7 @@ export default function App() {
     carName: string;
     modelYear: number;
     color: string;
+    price: string;
     mileage: number;
     mileageCondition: string;
     keyNumber: string;
@@ -112,6 +116,7 @@ export default function App() {
       carName: carName.trim(),
       modelYear,
       color: color.trim() || 'غير محدد',
+      price: isSoom ? 'سوم' : (price.trim() || 'غير محدد'),
       mileage,
       mileageCondition: currentCondition.label,
       keyNumber: keyNumber.trim().toUpperCase(),
@@ -138,6 +143,8 @@ export default function App() {
     setCarName('');
     setModelYear(new Date().getFullYear());
     setColor('');
+    setPrice('');
+    setIsSoom(false);
     setMileage(0);
     setTypedMileage('0');
     setKeyNumber('');
@@ -241,10 +248,38 @@ export default function App() {
     drawBox(width - 60 - boxW, startY, boxW, boxH, 'شركة السيارة:', data.company);
     drawBox(60, startY, boxW, boxH, 'نوع / اسم السيارة:', data.carName);
 
-    // Row 2: Model & Color
+    // Row 2: Model, Color & Price
     const row2Y = startY + boxH + 20;
-    drawBox(width - 60 - boxW, row2Y, boxW, boxH, 'الموديل:', `موديل ${data.modelYear}`);
-    drawBox(60, row2Y, boxW, boxH, 'اللون:', data.color || 'غير محدد');
+    const row2BoxW = 280;
+
+    // Box 1 (Right): Model
+    drawBox(width - 60 - row2BoxW, row2Y, row2BoxW, boxH, 'الموديل:', `موديل ${data.modelYear}`);
+
+    // Box 2 (Middle): Color
+    drawBox(360, row2Y, row2BoxW, boxH, 'اللون:', data.color || 'غير محدد');
+
+    // Box 3 (Left): Price
+    if (data.price === 'سوم') {
+      ctx.fillStyle = '#fffbeb';
+      ctx.strokeStyle = '#fde68a';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.roundRect(60, row2Y, row2BoxW, boxH, 18);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.direction = 'rtl';
+      ctx.textAlign = 'right';
+      ctx.fillStyle = '#b45309';
+      ctx.font = 'bold 18px Tajawal, sans-serif';
+      ctx.fillText('السعر:', 60 + row2BoxW - 24, row2Y + 38);
+
+      ctx.fillStyle = '#92400e';
+      ctx.font = 'bold 28px Tajawal, sans-serif';
+      ctx.fillText('سوم', 60 + row2BoxW - 24, row2Y + 80);
+    } else {
+      drawBox(60, row2Y, row2BoxW, boxH, 'السعر:', data.price || 'غير محدد');
+    }
 
     // Mileage Container Box
     const mileageY = row2Y + boxH + 30;
@@ -471,19 +506,19 @@ export default function App() {
             </div>
           </div>
 
-          {/* 3. MODEL SELECTION & COLOR FIELD */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-2 border-t border-slate-100">
+          {/* 3. MODEL SELECTION, COLOR & PRICE FIELDS */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5 pt-2 border-t border-slate-100">
             {/* Model Year Selection */}
             <div className="space-y-1.5">
               <label className="block text-xs font-bold text-slate-700 flex items-center gap-1.5">
                 <Calendar className="w-4 h-4 text-blue-600" />
-                <span>الموديل (اختيار)</span>
+                <span>الموديل</span>
                 <span className="text-blue-600">*</span>
               </label>
               <select
                 value={modelYear}
                 onChange={(e) => setModelYear(parseInt(e.target.value, 10))}
-                className="w-full bg-slate-50 border border-slate-300 text-slate-900 font-bold text-base rounded-xl py-3 px-4 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none transition cursor-pointer font-mono"
+                className="w-full bg-slate-50 border border-slate-300 text-slate-900 font-bold text-sm rounded-xl py-3 px-3 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none transition cursor-pointer font-mono"
               >
                 {yearOptions.map((y) => (
                   <option key={y} value={y} className="font-sans">
@@ -504,8 +539,54 @@ export default function App() {
                 value={color}
                 onChange={(e) => setColor(e.target.value)}
                 placeholder="اكتب اللون هنا..."
-                className="w-full bg-slate-50 border border-slate-300 text-slate-900 font-bold text-sm rounded-xl py-3 px-4 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none transition placeholder:text-slate-400 placeholder:font-normal"
+                className="w-full bg-slate-50 border border-slate-300 text-slate-900 font-bold text-sm rounded-xl py-3 px-3 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 focus:outline-none transition placeholder:text-slate-400 placeholder:font-normal"
               />
+            </div>
+
+            {/* PRICE FIELD WITH (سوم) CHECKBOX */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <label className="block text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                  <Coins className="w-4 h-4 text-blue-600" />
+                  <span>السعر</span>
+                </label>
+
+                {/* Small option for (سوم) */}
+                <label className="inline-flex items-center gap-1 cursor-pointer text-xs font-bold text-amber-800 bg-amber-50 hover:bg-amber-100 px-2 py-0.5 rounded-md border border-amber-300 transition select-none">
+                  <input
+                    type="checkbox"
+                    checked={isSoom}
+                    onChange={(e) => {
+                      const checked = e.target.checked;
+                      setIsSoom(checked);
+                      if (checked) {
+                        setPrice('سوم');
+                      } else if (price === 'سوم') {
+                        setPrice('');
+                      }
+                    }}
+                    className="w-3.5 h-3.5 text-amber-600 rounded focus:ring-amber-500 cursor-pointer accent-amber-600"
+                  />
+                  <span>(سوم)</span>
+                </label>
+              </div>
+
+              <div className="relative">
+                <input
+                  type="text"
+                  disabled={isSoom}
+                  value={isSoom ? 'سوم' : price}
+                  onChange={(e) => {
+                    if (!isSoom) setPrice(e.target.value);
+                  }}
+                  placeholder={isSoom ? 'سوم' : 'اكتب السعر...'}
+                  className={`w-full text-sm rounded-xl py-3 px-3 font-bold transition ${
+                    isSoom 
+                      ? 'bg-amber-100/90 border-2 border-amber-400 text-amber-950 font-black cursor-not-allowed text-center text-base' 
+                      : 'bg-slate-50 border border-slate-300 text-slate-900 focus:bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder:text-slate-400 placeholder:font-normal'
+                  }`}
+                />
+              </div>
             </div>
           </div>
 
@@ -704,15 +785,22 @@ export default function App() {
                       <span className="text-xs text-slate-500 block">نوع / اسم السيارة:</span>
                       <span className="font-extrabold text-slate-900 text-base">{pdfData.carName}</span>
                     </div>
+                  </div>
 
-                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
-                      <span className="text-xs text-slate-500 block">الموديل:</span>
-                      <span className="font-extrabold text-slate-900 font-mono text-base">موديل {pdfData.modelYear}</span>
+                  <div className="grid grid-cols-3 gap-2.5 text-sm">
+                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                      <span className="text-[11px] text-slate-500 block">الموديل:</span>
+                      <span className="font-extrabold text-slate-900 font-mono text-sm">موديل {pdfData.modelYear}</span>
                     </div>
 
-                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
-                      <span className="text-xs text-slate-500 block">اللون:</span>
-                      <span className="font-extrabold text-slate-900 text-base">{pdfData.color}</span>
+                    <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                      <span className="text-[11px] text-slate-500 block">اللون:</span>
+                      <span className="font-extrabold text-slate-900 text-sm">{pdfData.color}</span>
+                    </div>
+
+                    <div className={`p-2.5 rounded-xl border ${pdfData.price === 'سوم' ? 'bg-amber-50 border-amber-300 text-amber-900' : 'bg-slate-50 border-slate-200 text-slate-900'}`}>
+                      <span className="text-[11px] text-slate-500 block">السعر:</span>
+                      <span className="font-extrabold text-sm">{pdfData.price}</span>
                     </div>
                   </div>
 
