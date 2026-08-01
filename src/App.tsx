@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   CarFront, 
   Key, 
@@ -13,7 +13,8 @@ import {
   X,
   ShieldCheck,
   Loader2,
-  Coins
+  Coins,
+  AlertTriangle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import jsPDF from 'jspdf';
@@ -31,6 +32,24 @@ export default function App() {
   const [typedMileage, setTypedMileage] = useState<string>('0');
   const [isEditingMileageInput, setIsEditingMileageInput] = useState(false);
   const [keyNumber, setKeyNumber] = useState('');
+  const [usedKeyNumbers, setUsedKeyNumbers] = useState<string[]>([]);
+  const [showDuplicateWarning, setShowDuplicateWarning] = useState(false);
+  const [duplicateKeyNotice, setDuplicateKeyNotice] = useState('');
+
+  // Trigger 15-second floating warning immediately when typing a duplicate key
+  useEffect(() => {
+    const normalizedKey = keyNumber.trim().toUpperCase();
+    if (normalizedKey !== '' && usedKeyNumbers.includes(normalizedKey)) {
+      setShowDuplicateWarning(true);
+      setDuplicateKeyNotice(normalizedKey);
+      const timer = setTimeout(() => {
+        setShowDuplicateWarning(false);
+      }, 15000);
+      return () => clearTimeout(timer);
+    } else {
+      setShowDuplicateWarning(false);
+    }
+  }, [keyNumber, usedKeyNumbers]);
 
   // Save Toast, PDF Generating & PDF Modal State
   const [showSavedToast, setShowSavedToast] = useState(false);
@@ -94,6 +113,10 @@ export default function App() {
   // Calculate RTL slider track fill percentage
   const percentage = Math.min(100, Math.max(0, (mileage / maxSliderKm) * 100));
 
+  // Check if current key has already been used in this session
+  const normalizedCurrentKey = keyNumber.trim().toUpperCase();
+  const isKeyAlreadyUsed = normalizedCurrentKey !== '' && usedKeyNumbers.includes(normalizedCurrentKey);
+
   // Form Submit Handler (Directly exports and downloads PDF)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -111,6 +134,13 @@ export default function App() {
       return;
     }
 
+    const formattedKey = keyNumber.trim().toUpperCase();
+
+    // Register key in current session history if not present
+    if (formattedKey && !usedKeyNumbers.includes(formattedKey)) {
+      setUsedKeyNumbers((prev) => [...prev, formattedKey]);
+    }
+
     const compiledData = {
       company: company.trim(),
       carName: carName.trim(),
@@ -119,7 +149,7 @@ export default function App() {
       price: isSoom ? 'سوم' : (price.trim() || 'غير محدد'),
       mileage,
       mileageCondition: currentCondition.label,
-      keyNumber: keyNumber.trim().toUpperCase(),
+      keyNumber: formattedKey,
       createdAt: new Date().toLocaleDateString('ar-SA', {
         year: 'numeric',
         month: 'long',
@@ -409,6 +439,36 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col font-['Tajawal',sans-serif] selection:bg-blue-600 selection:text-white print:bg-white print:text-black">
       
+      {/* Top Floating Alert for Duplicate Key Number (Triggers immediately on typing, auto-dismisses after 15s) */}
+      <AnimatePresence>
+        {showDuplicateWarning && (
+          <motion.div
+            initial={{ opacity: 0, y: -40, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -40, scale: 0.95 }}
+            className="fixed top-6 left-1/2 -translate-x-1/2 z-50 bg-amber-500 text-slate-950 px-6 py-3.5 rounded-2xl shadow-2xl border-2 border-amber-300 flex items-center gap-3.5 max-w-lg w-11/12 print:hidden"
+          >
+            <AlertTriangle className="w-7 h-7 text-amber-950 flex-shrink-0 animate-bounce" />
+            <div className="text-right flex-1">
+              <div className="font-black text-sm text-slate-950">
+                تنبيه: رقم المفتاح ({duplicateKeyNotice}) مستخدم مسبقاً!
+              </div>
+              <div className="text-xs text-amber-950 font-bold opacity-90">
+                يمكنك الاستمرار واستخدامه، أو تغيير الرقم إذا أردت.
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowDuplicateWarning(false)}
+              className="p-1.5 hover:bg-amber-600/30 rounded-xl transition cursor-pointer text-amber-950"
+              title="إغلاق التنبيه"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Toast Notification on Save */}
       <AnimatePresence>
         {showSavedToast && (
@@ -416,7 +476,7 @@ export default function App() {
             initial={{ opacity: 0, y: -30, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -30, scale: 0.95 }}
-            className="fixed top-6 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white px-6 py-3.5 rounded-2xl shadow-xl border border-slate-700 flex items-center gap-3 max-w-md w-11/12 print:hidden"
+            className="fixed top-24 left-1/2 -translate-x-1/2 z-50 bg-slate-900 text-white px-6 py-3.5 rounded-2xl shadow-xl border border-slate-700 flex items-center gap-3 max-w-md w-11/12 print:hidden"
           >
             <CheckCircle2 className="w-6 h-6 text-emerald-400 flex-shrink-0" />
             <div className="text-right">
@@ -696,6 +756,7 @@ export default function App() {
               />
               <Key className="absolute right-4 top-1/2 -translate-y-1/2 w-6 h-6 text-blue-600/30 pointer-events-none" />
             </div>
+
             <p className="text-[11px] text-slate-400">
               * أدخل رقم الكارت أو الميدالية المكتوب على المفتاح بخزنة معرض وسام الشفا.
             </p>
